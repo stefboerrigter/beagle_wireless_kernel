@@ -14,6 +14,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <linux/gpio.h>
+#include <linux/delay.h>
 #include "transmitter_data.h"
 
 #define DEVICE_NAME "transmitter"
@@ -49,7 +50,7 @@
 #define GPIO1_CLR GPIO1 + 0x190	///< MACRO to clear GPIO 1 value
 #define GPIO1_SET GPIO1 + 0x194	///< MACRO to set GPIO 1 value
 
-#define PIN_DATA	12 //data pin number
+#define PIN_DATA	2 //data pin number
 
 //MACROs to set GPIO
 #define REG(addr) (*(volatile unsigned int *)(addr))	///< MACRO FUNCTION to write to addres
@@ -59,7 +60,7 @@
 static const char this_device_name[] = DEVICE_NAME;
 static void *remap_gpio1;
 static void *remap_config_module;
-
+static int pin;
 static void transmit_code(unsigned long code, int periodusec, int repeats);
 
 //static DEVICE_ATTR(node_name, S_IWUSR, NULL, func);
@@ -81,9 +82,12 @@ static ssize_t transmitter_write(struct file *file,
 	dataStruct.code = 0xFF;
 	dataStruct.period_usec = 320;
 	dataStruct.repeats = 3;
-	//if(copy_from_user(dataStruct, buf, count)){
 
-	//}
+	if(copy_from_user(&dataStruct, buf, count)){
+		pr_err("Error copying user data %d\n", count);
+		return -EFAULT;
+	}
+	pin = dataStruct.pin;
 	transmit_code(dataStruct.code, dataStruct.period_usec, dataStruct.repeats);
 	pr_alert("Dummy Write for Now %d\n", count);
 	return count;
@@ -91,7 +95,15 @@ static ssize_t transmitter_write(struct file *file,
 
 static void transmit_code(unsigned long code, int periodusec, int repeats)
 {
-	pr_alert("Received Code: 0x%lx and Delay %d for %d \n", code, periodusec, repeats);
+	int i;
+	pr_alert("Received Code: 0x%lx and Delay %d for %d repeats[%d]\n", code, periodusec, repeats, pin);
+	for(i = 0; i < repeats; i++)
+	{
+		pin_high();
+		udelay(320);//udelay(periodusec);
+		pin_low();
+		udelay(320);//delay(periodusec);
+	}
 #if 0
 	unsigned long dataBase4 = 0;
 	int i,j = 0;
@@ -158,6 +170,7 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 	}
 
 #endif
+	pin_low(); //Make sure pin is low!!
 }
 
 static const struct file_operations transmitter_fops = {
@@ -211,6 +224,8 @@ static int init_gpio(void)
     if (!remap_config_module)
     	return -1;
 
+	writel(0x0F, remap_config_module + 0x08); //GPMC_AD2 (gpio1_2) mux to mode 7 for gpio!
+
 	remap_gpio1 = ioremap(GPIO_1_OFFSET, GPIO_1_REG_SIZE);
 	if (!remap_gpio1) {
 		iounmap(remap_config_module);
@@ -229,6 +244,7 @@ static int init_gpio(void)
     val &= ~(1 << PIN_DATA);      ///< Set GPIO DATA PIN as OUTPUT
     writel(val, remap_gpio1 + GPIO_OE_OFFSET);
 
+	pin_low(); //Always start with pin low!!!
 	return 0;
 }
 
