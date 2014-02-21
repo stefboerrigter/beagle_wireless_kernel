@@ -87,7 +87,7 @@ static ssize_t transmitter_write(struct file *file,
 		pr_err("Error copying user data %d\n", count);
 		return -EFAULT;
 	}
-	pin = dataStruct.pin;
+	pr_alert("READ: %d - %lx %d %d \n", dataStruct.pin, dataStruct.code, dataStruct.period_usec, dataStruct.repeats);
 	transmit_code(dataStruct.code, dataStruct.period_usec, dataStruct.repeats);
 	pr_alert("Dummy Write for Now %d\n", count);
 	return count;
@@ -96,7 +96,11 @@ static ssize_t transmitter_write(struct file *file,
 static void transmit_code(unsigned long code, int periodusec, int repeats)
 {
 	int i;
+	int j = 0;
+	unsigned long dataBase4 = 0;
+
 	pr_alert("Received Code: 0x%lx and Delay %d for %d repeats[%d]\n", code, periodusec, repeats, pin);
+
 	for(i = 0; i < repeats; i++)
 	{
 		pin_high();
@@ -104,13 +108,13 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 		pin_low();
 		udelay(320);//delay(periodusec);
 	}
-#if 0
-	unsigned long dataBase4 = 0;
-	int i,j = 0;
 
+	if(repeats > 100) //must be wrong...
+	{
+		return;
+	}
 
 	code &= 0xFFFFF;
-	unsigned long dataBase4 = 0;
 
 	for (i=0; i<12; i++) {
 		dataBase4<<=2;
@@ -125,37 +129,37 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 
 		// Recycle code as working var to save memory
 		code=dataBase4;
-		for (int i=0; i<12; i++) {
+		for (i=0; i<12; i++) {
 			switch (code & 0x03) {
 				case 0:
-					digitalWrite(pin, HIGH);
-					delayMicroseconds(periodusec);
-					digitalWrite(pin, LOW);
-					delayMicroseconds(periodusec*3);
-					digitalWrite(pin, HIGH);
-					delayMicroseconds(periodusec);
-					digitalWrite(pin, LOW);
-					delayMicroseconds(periodusec*3);
+					pin_high();
+					udelay(periodusec);
+					pin_low();
+					udelay(periodusec*3);
+					pin_high();
+					udelay(periodusec);
+					pin_low();
+					udelay(periodusec*3);
 					break;
 				case 1:
-					digitalWrite(pin, HIGH);
-					delayMicroseconds(periodusec*3);
-					digitalWrite(pin, LOW);
-					delayMicroseconds(periodusec);
-					digitalWrite(pin, HIGH);
-					delayMicroseconds(periodusec*3);
-					digitalWrite(pin, LOW);
-					delayMicroseconds(periodusec);
+					pin_high();
+					udelay(periodusec*3);
+					pin_low();
+					udelay(periodusec);
+					pin_high();
+					udelay(periodusec*3);
+					pin_low();
+					udelay(periodusec);
 					break;
 				case 2: // KA: X or float
-					digitalWrite(pin, HIGH);
-					delayMicroseconds(periodusec);
-					digitalWrite(pin, LOW);
-					delayMicroseconds(periodusec*3);
-					digitalWrite(pin, HIGH);
-					delayMicroseconds(periodusec*3);
-					digitalWrite(pin, LOW);
-					delayMicroseconds(periodusec);
+					pin_high();
+					udelay(periodusec);
+					pin_low();
+					udelay(periodusec*3);
+					pin_high();
+					udelay(periodusec*3);
+					pin_low();
+					udelay(periodusec);
 					break;
 			}
 			// Next trit
@@ -163,13 +167,12 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 		}
 
 		// Send termination/synchronization-signal. Total length: 32 periods
-		digitalWrite(pin, HIGH);
-		delayMicroseconds(periodusec);
-		digitalWrite(pin, LOW);
-		delayMicroseconds(periodusec*31);
+		pin_high();
+		udelay(periodusec);
+		pin_low();
+		udelay(periodusec*31);
 	}
 
-#endif
 	pin_low(); //Make sure pin is low!!
 }
 
