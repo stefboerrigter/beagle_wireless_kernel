@@ -544,5 +544,6 @@ source "drivers/misc/altera-stapl/Kconfig"
 source "drivers/misc/mei/Kconfig"
 source "drivers/misc/vmw_vmci/Kconfig"
 source "drivers/misc/cape/Kconfig"
+source "drivers/misc/433MHz/Kconfig"
 
 endmenu

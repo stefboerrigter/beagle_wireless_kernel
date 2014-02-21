@@ -1,0 +1,10 @@
+#
+# 433MHz drivers
+#
+
+config TRANSMITTER
+	tristate "433 MHz Wireless Transmitter"
+	depends on ARCH_OMAP2PLUS
+	default n
+	help
+	  This driver enables you to send messages over 433MHz around.
