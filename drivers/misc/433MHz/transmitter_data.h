@@ -2,7 +2,7 @@
 #define TRANSMITTER_DATA_H
 
 typedef struct {
-	char pin;
+	int pin;
 	unsigned long code;
 	unsigned int period_usec;
 	int repeats;

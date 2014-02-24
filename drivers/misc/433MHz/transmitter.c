@@ -83,11 +83,14 @@ static ssize_t transmitter_write(struct file *file,
 	dataStruct.period_usec = 320;
 	dataStruct.repeats = 3;
 
-	if(copy_from_user(&dataStruct, buf, count)){
-		pr_err("Error copying user data %d\n", count);
-		return -EFAULT;
-	}
-	pr_alert("READ: %d - %lx %d %d \n", dataStruct.pin, dataStruct.code, dataStruct.period_usec, dataStruct.repeats);
+	sscanf(buf, "[%d] [%ld] [%d] [%d]",
+					&dataStruct.pin, &dataStruct.code,
+					&dataStruct.period_usec, &dataStruct.repeats);
+
+	//if(copy_from_user(&dataStruct, buf, count)){
+	//	pr_err("Error copying user data %d\n", count);
+	//	return -EFAULT;
+	//}
 	transmit_code(dataStruct.code, dataStruct.period_usec, dataStruct.repeats);
 	pr_alert("Dummy Write for Now %d\n", count);
 	return count;
@@ -100,14 +103,6 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 	unsigned long dataBase4 = 0;
 
 	pr_alert("Received Code: 0x%lx and Delay %d for %d repeats[%d]\n", code, periodusec, repeats, pin);
-
-	for(i = 0; i < repeats; i++)
-	{
-		pin_high();
-		udelay(320);//udelay(periodusec);
-		pin_low();
-		udelay(320);//delay(periodusec);
-	}
 
 	if(repeats > 100) //must be wrong...
 	{
