@@ -60,7 +60,6 @@
 static const char this_device_name[] = DEVICE_NAME;
 static void *remap_gpio1;
 static void *remap_config_module;
-static int pin;
 static void transmit_code(unsigned long code, int periodusec, int repeats);
 
 //static DEVICE_ATTR(node_name, S_IWUSR, NULL, func);
@@ -87,12 +86,7 @@ static ssize_t transmitter_write(struct file *file,
 					&dataStruct.pin, &dataStruct.code,
 					&dataStruct.period_usec, &dataStruct.repeats);
 
-	//if(copy_from_user(&dataStruct, buf, count)){
-	//	pr_err("Error copying user data %d\n", count);
-	//	return -EFAULT;
-	//}
 	transmit_code(dataStruct.code, dataStruct.period_usec, dataStruct.repeats);
-	pr_alert("Dummy Write for Now %d\n", count);
 	return count;
 }
 
@@ -102,7 +96,7 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 	int j = 0;
 	unsigned long dataBase4 = 0;
 
-	pr_alert("Received Code: 0x%lx and Delay %d for %d repeats[%d]\n", code, periodusec, repeats, pin);
+	pr_alert("TRANS: Sending 0x%lx (delay %d, repeats[%d])\n", code, periodusec, repeats);
 
 	if(repeats > 100) //must be wrong...
 	{
