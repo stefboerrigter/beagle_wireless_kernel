@@ -280,6 +280,13 @@
 		>;
 	};
 
+	uart4_pins: pinmux_uart4_pins {
+		pinctrl-single,pins = <
+			0x070 (PIN_INPUT_PULLUP | MUX_MODE6)	/* uart0_rxd.uart0_rxd */
+			0x074 (PIN_OUTPUT_PULLDOWN | MUX_MODE6)	/* uart0_txd.uart0_txd */
+		>;
+	};
+
 	clkout2_pin: pinmux_clkout2_pin {
 		pinctrl-single,pins = <
 			0x1b4 (PIN_OUTPUT_PULLDOWN | MUX_MODE3)	/* xdma_event_intr1.clkout2 */
