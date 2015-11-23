@@ -11,6 +11,9 @@
 #include <linux/device.h>
 #include <linux/spi/spi.h>
 #include <linux/platform_device.h>
+#include <linux/of_device.h>
+#include <linux/of_gpio.h>
+
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <linux/gpio.h>
@@ -19,48 +22,22 @@
 
 #define DEVICE_NAME "transmitter"
 
- ///<Offsets
-#define GPIO_0_OFFSET 		0x44E07000	///< GPIO0 Offset in AM335x
-#define GPIO_1_OFFSET 		0x4804C000	///< GPIO1 Offset in AM335x
-#define GPIO_0_REG_SIZE		0x1000	///< GPIO0 register size in AM335x
-#define GPIO_1_REG_SIZE		0x1000	///< GPIO1 register size in AM335x
-#define CONFIG_MODULE		0x44E10800	///< Config module Offset in AM335x
-#define CONFIG_MODULE_SIZE  0x2000	///< Config module register size in AM335x
-
-#define GPIO_OE_OFFSET		0x134	//Determins input / output of gpio pins
-
-#define	GPIO_BANK_SIZE 			32	///< GPIO Bank Size
-
-#define	GPIO0_BANK_OFFSET		(0)	///< GPIO Bank Offset GPIO0
-#define GPIO1_BANK_OFFSET		(GPIO0_BANK_OFFSET + GPIO_BANK_SIZE)	///< GPIO Bank Offset GPIO1
-#define GPIO2_BANK_OFFSET		(GPIO1_BANK_OFFSET + GPIO_BANK_SIZE)	///< GPIO Bank Offset GPIO2
-#define GPIO3_BANK_OFFSET		(GPIO2_BANK_OFFSET + GPIO_BANK_SIZE)	///< GPIO Bank Offset GPIO3
-
-#define	GPIO_0(pin) 			(GPIO0_BANK_OFFSET + pin)	///< GPIO0 Pin number Macro
-#define	GPIO_1(pin) 			(GPIO1_BANK_OFFSET + pin)	///< GPIO1 Pin number Macro
-#define	GPIO_2(pin) 			(GPIO2_BANK_OFFSET + pin)	///< GPIO2 Pin number Macro
-#define	GPIO_3(pin) 			(GPIO3_BANK_OFFSET + pin)	///< GPIO3 Pin number Macro
-
-//MACROs To set gpio pins high / low
-#define GPIO0 remap_gpio0	///< Address of GPIO 0
-#define GPIO1 remap_gpio1	///< Address of GPIO 1
-#define GPIO0_CLR GPIO0 + 0x190	///< MACRO to clear GPIO value
-#define GPIO0_SET GPIO0 + 0x194	///< MACRO to set GPIO 0 value
-#define GPIO0_GET GPIO0 + 0x138	///< MACRO to get GPIO 0 value
-#define GPIO1_CLR GPIO1 + 0x190	///< MACRO to clear GPIO 1 value
-#define GPIO1_SET GPIO1 + 0x194	///< MACRO to set GPIO 1 value
-
-#define PIN_DATA	2 //data pin number
-
 //MACROs to set GPIO
-#define REG(addr) (*(volatile unsigned int *)(addr))	///< MACRO FUNCTION to write to addres
-#define pin_high()  	 REG(GPIO1_SET) = (1<<PIN_DATA)	///< START ACQ HIGH
-#define pin_low()   	 REG(GPIO1_CLR) = (1<<PIN_DATA)	///< START ACQ LOW
+#define pin_high()  gpio_set_value(radio_gpio, 1)   //	 REG(GPIO1_SET) = (1<<PIN_DATA)	///< START ACQ HIGH
+#define pin_low()   gpio_set_value(radio_gpio, 0)   //	 REG(GPIO1_CLR) = (1<<PIN_DATA)	///< START ACQ LOW
+
+
 
 static const char this_device_name[] = DEVICE_NAME;
-static void *remap_gpio1;
-static void *remap_config_module;
+
 static void transmit_code(unsigned long code, int periodusec, int repeats);
+
+//header Definitions
+static int transmitter_probe(struct platform_device *pdev);
+static int transmitter_remove(struct platform_device *pdev);
+
+static int transmitter_chdev_init(void );
+static void transmitter_chdev_destroy(void );
 
 //static DEVICE_ATTR(node_name, S_IWUSR, NULL, func);
 
@@ -70,7 +47,41 @@ struct transmitter_dev_t {
 	struct class *class;	/* Udev / HAL related */
 };
 
-static struct transmitter_dev_t transmitter_dev;
+#define DEVICE_COMPATIBLE_PRE		"ti"
+#define compatible(_name)		{ .compatible = DEVICE_COMPATIBLE_PRE "," DEVICE_NAME }
+
+
+// use macro to get the device name definition
+#define device_name			transmitter_device_name
+
+// as this is not a static, use a unique name (fix by using device_name macro)
+const char transmitter_device_name[] = DEVICE_NAME;
+
+// Set the device tree compatible types
+static struct of_device_id compatible_dt_ids[] = {
+	compatible(DEVICE_NAME),
+	{}
+};
+
+// Define platform driver specification (device tree)
+static struct platform_driver platform_driver = {
+	.probe = transmitter_probe,
+	.remove = transmitter_remove,
+	.driver = {
+		.name = DEVICE_NAME,
+		.owner = THIS_MODULE,
+		.of_match_table = compatible_dt_ids,
+	},
+};
+
+static struct chdev_struct {
+	dev_t dev_num;		/* Char dev region (major,minor), reterned by kernel on alloc_chrdev_region() */
+	struct cdev *cdev;	/* Char dev related structure */
+	struct class *class;	/* Udev / HAL related */
+} device_struct;
+
+//Gpio Used for radio
+static int radio_gpio = -1;
 
 static ssize_t transmitter_write(struct file *file,
 			  const char __user *buf, size_t count, loff_t *ppos)
@@ -96,7 +107,7 @@ static void transmit_code(unsigned long code, int periodusec, int repeats)
 	int j = 0;
 	unsigned long dataBase4 = 0;
 
-	pr_alert("TRANS: Sending 0x%lx (delay %d, repeats[%d])\n", code, periodusec, repeats);
+	pr_alert("%s: Sending 0x%lx (delay %d, repeats[%d])\n", device_name, code, periodusec, repeats);
 
 	if(repeats > 100) //must be wrong...
 	{
@@ -170,30 +181,35 @@ static const struct file_operations transmitter_fops = {
 	.write = transmitter_write,
 };
 
-static int init_chardev(void)
+
+/**
+ * Initialize character device
+ */
+static int transmitter_chdev_init(void)
 {
 	int ret = 0;
 
-	ret = alloc_chrdev_region(&transmitter_dev.devt, 0, 1, this_device_name);
+	ret = alloc_chrdev_region(&device_struct.dev_num, 0, 1, device_name);
 	if (ret < 0) {
-		pr_err("%s: alloc_chrdev_region() failed: %d\n",
-		       this_device_name, ret);
+		pr_err("%s: alloc_chrdev_region() failed with %d\n", device_name, ret);
 		return -1;
 	}
 
-	transmitter_dev.cdev = cdev_alloc();
-	cdev_init(transmitter_dev.cdev, &transmitter_fops);
+	device_struct.cdev = cdev_alloc();
+	cdev_init(device_struct.cdev, &transmitter_fops);
 
-	ret = cdev_add(transmitter_dev.cdev, transmitter_dev.devt, 1);
+	ret = cdev_add(device_struct.cdev, device_struct.dev_num, 1);
 	if (ret < 0) {
-		pr_err("%s: cdev_add failed: %d\n", this_device_name, ret);
+		pr_err("%s: cdev_add failed: %d\n", device_name, ret);
 		goto fail_cdev;
 	}
+
 	/* udev & HAL usage */
-	transmitter_dev.class = class_create(THIS_MODULE, "transmitter_class");
-	if (device_create(transmitter_dev.class, NULL, transmitter_dev.devt, NULL,
-			  this_device_name) == NULL) {
-		pr_err("%s: device_create failed: %d\n", this_device_name, ret);
+	device_struct.class = class_create(THIS_MODULE, DEVICE_NAME "_class");
+
+	if (device_create(device_struct.class, NULL, device_struct.dev_num, NULL,
+			  device_name) == NULL) {
+		pr_err("%s: device_create failed: %d\n", device_name, ret);
 		ret = -1;
 		goto fail_class;
 	}
@@ -201,88 +217,117 @@ static int init_chardev(void)
 	return 0;
 
 fail_class:
-	cdev_del(transmitter_dev.cdev);
+	cdev_del(device_struct.cdev);
 
 fail_cdev:
-	unregister_chrdev_region(transmitter_dev.devt, 1);
+	unregister_chrdev_region(device_struct.dev_num, 1);
 	return ret;
+
 }
 
-static int init_gpio(void)
+/**
+ * Cleanup character device
+ */
+static void transmitter_chdev_destroy(void)
 {
-	int val = 0;
+	device_destroy(device_struct.class, device_struct.dev_num);
+	class_unregister(device_struct.class);
+	class_destroy(device_struct.class);
+	cdev_del(device_struct.cdev);
+	unregister_chrdev_region(device_struct.dev_num, 1);
+}
 
-	remap_config_module = ioremap(CONFIG_MODULE, CONFIG_MODULE_SIZE);
-    if (!remap_config_module)
-    	return -1;
 
-	writel(0x0F, remap_config_module + 0x08); //GPMC_AD2 (gpio1_2) mux to mode 7 for gpio!
+static int transmitter_probe(struct platform_device *pdev)
+{
+  const struct of_device_id * of_id;
+	int ret = 0;
 
-	remap_gpio1 = ioremap(GPIO_1_OFFSET, GPIO_1_REG_SIZE);
-	if (!remap_gpio1) {
-		iounmap(remap_config_module);
+	// variables to use to request GPIO
+	enum of_gpio_flags ofgpioflags;
+	unsigned long gpioflags;
+
+	// Check on which device we match (can be used to make special configurations)
+	of_id = of_match_device(compatible_dt_ids, &(pdev->dev));
+  
+  if(of_id){
+		pr_alert("%s: matching device id found, name: %s, type: %s, compatible: %s?\n", device_name, of_id->name, of_id->type, of_id->compatible);
+	}else{
+		pr_err("%s: no matching device id found?\n", device_name);// todo
 		return -1;
 	}
-
-	val = gpio_request(GPIO_1(PIN_DATA), "TransmitterData");
-	if (val) {
-		pr_err("TRANS: Data line request Error[%d]", PIN_DATA);
-		iounmap(remap_gpio1);
-		iounmap(remap_config_module);
-		return -1;
+  
+  // Configure GPIO
+	radio_gpio = of_get_named_gpio_flags(pdev->dev.of_node, "radio-gpio", 0, &ofgpioflags);
+	if (IS_ERR_VALUE(radio_gpio)) {
+		dev_err(&pdev->dev, "%s: error obtaining GPIO from devicetree(%d)\n", device_name, radio_gpio);
+		return radio_gpio;
+	} else {
+		gpioflags = GPIOF_DIR_OUT;
+		if (ofgpioflags & OF_GPIO_ACTIVE_LOW) {
+			gpioflags |= GPIOF_INIT_LOW;
+		} else {
+			gpioflags |= GPIOF_INIT_HIGH;
+		}
+		ret = devm_gpio_request_one(&pdev->dev, radio_gpio, gpioflags, DEVICE_NAME ":radio");
+		if (ret != 0) {
+			dev_err(&pdev->dev, "%s: failed to request GPIO\n", device_name);
+			return ret;
+		}
 	}
 
-    val = readl(remap_gpio1 + GPIO_OE_OFFSET);      ///< Read current register
-    val &= ~(1 << PIN_DATA);      ///< Set GPIO DATA PIN as OUTPUT
-    writel(val, remap_gpio1 + GPIO_OE_OFFSET);
+  // initialize character device
+	ret = transmitter_chdev_init();
+	if(ret < 0){
+		pr_err("%s: error initializing character device\n", device_name);
+    return ret;
+	}
 
+  pr_alert("%s - start with line low\n", device_name);
 	pin_low(); //Always start with pin low!!!
+  return 0;
+}
+
+
+/**
+ * Called when driver is removed
+ */
+static int transmitter_remove(struct platform_device *pdev)
+{
+  transmitter_chdev_destroy();
+  gpio_free(radio_gpio);
+  
+  return 0;
+}
+
+/**
+ * Initialize transmitter driver (driver entry, setup everything to register
+ * driver later on)
+ */
+static int transmitter_init(void)
+{
+  pr_warn("%s - Init: %s\n", device_name, __func__);
+
+  radio_gpio = -1;
+  
+  platform_driver_register(&platform_driver);
+
 	return 0;
 }
 
-static void free_gpio(void)
+/**
+ * Cleanup transmitter driver
+ */
+static void __exit transmitter_exit(void)
 {
-	gpio_free(GPIO_1(PIN_DATA));
-	iounmap(remap_gpio1);
-	iounmap(remap_config_module);
+  pr_alert("%s: exit platform device\n", device_name);
+	platform_driver_unregister(&platform_driver);
 }
 
-static int bee_quattro_init(void)
-{
-    int ret;
-    pr_warn("TRANS: %s\n", __func__);
+module_init(transmitter_init);
+module_exit(transmitter_exit);
 
-    memset(&transmitter_dev, 0, sizeof(struct transmitter_dev_t));
-
-	ret = init_chardev();
-	if (ret != 0) {
-        return ret;
-    }
-
-	ret = init_gpio();
-	if (ret != 0){
-		return ret;
-	}
-
-	return 0;
-}
-
-static void __exit bee_quattro_exit(void)
-{
-    // chardev cleanup
-	device_destroy(transmitter_dev.class, transmitter_dev.devt);
-	class_unregister(transmitter_dev.class);
-	class_destroy(transmitter_dev.class);
-	cdev_del(transmitter_dev.cdev);
-	unregister_chrdev_region(transmitter_dev.devt, 1);
-
-	free_gpio();
-}
-
-module_init(bee_quattro_init);
-module_exit(bee_quattro_exit);
-
-MODULE_AUTHOR("Benchmark");
-MODULE_DESCRIPTION("QUATTRO SPI driver for BEE");
+MODULE_AUTHOR("Stef");
+MODULE_DESCRIPTION("Radio Transmitter Driver");
 MODULE_LICENSE("GPL");
 

@@ -1,0 +1,4 @@
+#compiles DTC:
+dtc -O dtb -o w1-00A0.dtbo -b o -@ w1.dts
+#Loads into capemgr
+echo w1:00A0 > /sys/devices/bone_capemgr.6/slots

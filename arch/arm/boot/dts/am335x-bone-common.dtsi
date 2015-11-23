@@ -99,7 +99,7 @@
 			};
 
 			/* geiger cape version A0 without an EEPROM */
-			slot@5 {
+		/*	slot@5 {
 				ti,cape-override;
 				compatible = "kernel-command-line", "runtime";
 				board-name = "Bone-Geiger";
@@ -108,7 +108,6 @@
 				part-number = "BB-BONE-GEIGER";
 			};
 
-			/* Nixie cape version A0 without an EEPROM */
 			slot@7 {
 				ti,cape-override;
 				compatible = "kernel-command-line", "runtime";
@@ -118,7 +117,6 @@
 				part-number = "BB-BONE-NIXIE";
 			};
 
-			/* adafruit 1.8" TFT prototype cape */
 			slot@8 {
 				ti,cape-override;
 				compatible = "kernel-command-line", "runtime";
@@ -128,7 +126,6 @@
 				part-number = "BB-BONE-TFT-01";
 			};
 
-			/* adafruit RTC DS1307 prototype cape */
 			slot@9 {
 				ti,cape-override;
 				compatible = "kernel-command-line", "runtime";
@@ -147,7 +144,6 @@
 				part-number = "BB-BONE-HEXY-01";
 			};
 
-			/* MRF24J40 Cape Override */
 			slot@11 {
 				ti,cape-override;
 				compatible = "kernel-command-line", "runtime";
@@ -157,7 +153,6 @@
 				part-number = "BB-BONE-MRF24J40";
 			};
 
-			/* RS232 cape */
 			slot@12 {
 				ti,cape-override;
 				compatible = "kernel-command-line", "runtime";
@@ -167,7 +162,6 @@
 				part-number = "BB-BONE-RS232-01";
 			};
 
-			/* GPS cape */
 			slot@13 {
 				compatible = "kernel-command-line", "runtime";
 				board-name = "BB-BONE-GPS";
@@ -176,7 +170,6 @@
 				part-number = "BB-BONE-GPS-01";
 			};
 
-			/* Beaglebone black has it soldered on */
 			slot@100 {
 				ti,cape-override;
 				priority = <1>;
@@ -187,7 +180,6 @@
 				part-number = "BB-BONE-EMMC-2G";
 			};
 
-			/* Beaglebone black has it soldered on */
 			slot@101 {
 				ti,cape-override;
 				priority = <1>;
@@ -198,7 +190,6 @@
 				part-number = "BB-BONELT-HDMI";
 			};
 
-			/* Beaglebone black has it soldered on (but no audio) */
 			slot@102 {
 				ti,cape-override;
 				priority = <2>;
@@ -208,12 +199,22 @@
 				manufacturer = "Texas Instruments";
 				part-number = "BB-BONELT-HDMIN";
 			};
+*/
 		};
 
 		/* mapping between board names and dtb objects */
 		capemaps {
 			/* capemaps are only needed for special cases */
 		};
+	};
+
+	transmitter {
+		compatible = "ti,transmitter";
+		radio-gpio = <&gpio2 1 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&radio_pins>;
+
+		status = "okay";
 	};
 
 	fb: fb@4830e000 {
@@ -350,6 +351,12 @@
 	mmc1_pins: pinmux_mmc1_pins {
 		pinctrl-single,pins = <
 			0x160 (PIN_INPUT | MUX_MODE7) /* GPIO0_6 */
+		>;
+	};
+
+	radio_pins: pinmux_radio_pins{
+		pinctrl-single,pins = <
+			0x08c (PIN_INPUT_PULLUP | MUX_MODE7) /* P8-18 : gpmc_clk.gpio2_1 */
 		>;
 	};
 

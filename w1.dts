@@ -1,33 +1,36 @@
 /dts-v1/;
 /plugin/;
+
 /{
     compatible = "ti,beaglebone", "ti,beaglebone-black";
+
+	/* identification*/
     part-number = "BB-W1";
     version = "00A0";
 
     /* state the resources this cape uses */
     exclusive-use =
-    "P9.22",   /* the pin header uses */
-    "gpio0_2"; /* the hardware IP uses */
+    "P8.26";   /* the pin header uses */
+/*    "gpio0_2";*/ /* the hardware IP uses */
 
     fragment@0 {
         target = <&am33xx_pinmux>;
         __overlay__ {
             dallas_w1_pins: pinmux_dallas_w1_pins {
-                pinctrl-single,pins = <0x150 0x37>; /* GPIO1_13 INPUT_PULLUP MUX 7*/
-            };
+                pinctrl-single,pins = <0x07C 0x37>; /* GPIO1_2929292929292929292929292929292929292929292929292929292929 */
+		    };
         };
     };
 
     fragment@1 {
-        target = <&ocp>;
+        target = <&baseboard_beaglebone_black>;
         __overlay__ {
-            onewire@0 {
+            onewire {
                 compatible = "w1-gpio";
                 pinctrl-names = "default";
                 pinctrl-0 = <&dallas_w1_pins>;
                 status = "okay";
-                gpios = <&gpio1 2 0>;
+                gpios = <&gpio1 29 0>;
             };
         };
     };
